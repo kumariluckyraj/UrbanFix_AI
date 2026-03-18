@@ -1,68 +1,59 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { FaTrashAlt, FaShoppingCart } from "react-icons/fa";
 
-const MyCart = () => {
+const CartPage = () => {
   const [cartItems, setCartItems] = useState([]);
 
+  // Load cart from localStorage on page load
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const storedItems = JSON.parse(localStorage.getItem("cartItems")) || [];
-      setCartItems(storedItems);
-    }
+    const savedCart = JSON.parse(localStorage.getItem("myCart") || "[]");
+    setCartItems(savedCart);
   }, []);
 
-  const handleRemoveItem = (indexToRemove) => {
-    const newCart = cartItems.filter((_, index) => index !== indexToRemove);
-    localStorage.setItem("cartItems", JSON.stringify(newCart));
-    setCartItems(newCart);
+  // Remove item from cart
+  const removeFromCart = (index) => {
+    const updatedCart = [...cartItems];
+    updatedCart.splice(index, 1);
+    localStorage.setItem("myCart", JSON.stringify(updatedCart));
+    setCartItems(updatedCart);
   };
 
+  // Calculate total price
+  const totalPrice = cartItems.reduce((sum, item) => sum + parseFloat(item.price), 0);
+
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12">
-      <div className="flex items-center gap-3 mb-8">
-        <FaShoppingCart className="text-4xl text-green-700" />
-        <h1 className="text-4xl font-bold text-green-800">My Cart</h1>
-      </div>
+    <div className="max-w-4xl mx-auto mt-10 p-6">
+      <h1 className="text-2xl font-bold mb-4">My Cart</h1>
 
       {cartItems.length === 0 ? (
-        <p className="text-gray-500 text-lg text-center mt-20">
-          Your cart is empty. Start exploring sustainable products!
-        </p>
+        <p className="text-gray-600">Your cart is empty.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {cartItems.map((item, index) => (
-            <div
-              key={index}
-              className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-5 flex gap-5 items-start"
-            >
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-40 h-40 object-cover rounded-xl border border-gray-200"
-              />
-              <div className="flex-1 space-y-2">
-                <h2 className="text-2xl font-semibold text-green-700">
-                  {item.name}
-                </h2>
-                <p className="text-gray-600">{item.description}</p>
-                <p className="text-lg font-bold text-green-800">
-                  ₹{item.price}
-                </p>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {cartItems.map((item, idx) => (
+              <div key={idx} className="border p-4 rounded flex flex-col">
+                <img src={item.image} alt={item.name} className="w-full h-40 object-cover mb-2 rounded" />
+                <h2 className="font-bold text-green-700">{item.name}</h2>
+                <p className="text-gray-700">₹{item.price}</p>
+                <p className="text-sm text-gray-600 line-clamp-2">{item.description}</p>
                 <button
-                  onClick={() => handleRemoveItem(index)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg mt-2 transition-colors duration-200"
+                  onClick={() => removeFromCart(idx)}
+                  className="mt-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
                 >
-                  <FaTrashAlt />
                   Remove
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          <div className="mt-6 flex justify-between items-center p-4 border-t">
+            <p className="font-bold text-lg">Total: ₹{totalPrice}</p>
+            {/* Here you could add a "Checkout All" button if you want */}
+          </div>
+        </>
       )}
     </div>
   );
 };
 
-export default MyCart;
+export default CartPage;

@@ -9,14 +9,25 @@ import 'react-toastify/dist/ReactToastify.css';
 import './dashboard.css';
 
 const Dashboard = () => {
-  const { data: session, status, update } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
-  const [form, setform] = useState({});
+  const [form, setForm] = useState({});
+  const [loading, setLoading] = useState(true);
 
+  // Fetch user data
   const getData = useCallback(async () => {
     if (session?.user?.name) {
-      const u = await fetchuser(session.user.name);
-      setform(u);
+      try {
+        const u = await fetchuser(session.user.name);
+        setForm(u || {}); // fallback to empty object
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+        setForm({});
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
     }
   }, [session?.user?.name]);
 
@@ -30,63 +41,115 @@ const Dashboard = () => {
     }
   }, [status, session, getData, router]);
 
-  if (status === "loading") {
-    return <div className="text-center mt-10">Loading...</div>;
+  if (status === "loading" || loading) {
+    return <div className="text-center mt-10 text-white">Loading...</div>;
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData.entries());
-  
-    const emptyField = Object.entries(data).find(([key, value]) => value.trim() === "");
-    if (emptyField) {
-      toast.error(`Please fill out the ${emptyField[0]} field.`);
-      return;
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const data = Object.fromEntries(formData.entries());
+
+  // Add the logged-in user's email
+  if (session?.user?.email) {
+    data.email = session.user.email;
+  } else {
+    toast.error("User email not found. Please login again.");
+    return;
+  }
+
+  // Validate empty fields
+  const emptyField = Object.entries(data).find(([key, value]) => value.trim() === "");
+  if (emptyField) {
+    toast.error(`Please fill out the ${emptyField[0]} field.`);
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/updateProfile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (res.ok) {
+      toast.success("You have registered successfully! 🎉");
+      setTimeout(() => router.push("/sell"), 2000);
+    } else {
+      const errorData = await res.json();
+      toast.error(errorData.error || "Failed to update profile.");
     }
-  
-    await update();
-    await updateProfile(data, session.user.name);
-  
-    toast.success("You have registered successfully! 🎉");
-  
-    setTimeout(() => {
-      router.push('/sell');
-    }, 2000); // Delay navigation to let user see the toast
-  };
-  
-  
-
+  } catch (err) {
+    console.error(err);
+    toast.error("Something went wrong!");
+  }
+};
   return (
-    <div>
+    <div className="bg-green-100 min-h-screen mt-10">
       <div className='container mx-auto py-5 px-6 pt-20'>
-        <h1 className='text-center py-2 text-white
-   text-3xl font-bold rounded-2xl bg-green-600'>Artist Registration - EquiCraft</h1>
+        <h1 className='text-center py-2 text-white text-3xl font-bold rounded-2xl bg-green-600'>
+          Artist Registration - EquiCraft
+        </h1>
 
-        <form className="max-w-2xl mx-auto" onSubmit={handleSubmit}>
+        <form className="max-w-2xl mx-auto mt-6" onSubmit={handleSubmit}>
+          {/* Full Name */}
           <div className='my-2'>
             <label htmlFor="name" className="block mb-2 text-sm font-medium">Full Name</label>
-            <input type="text" name="name" id="name" defaultValue={form.name || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="text"
+              name="name"
+              id="name"
+              defaultValue={form?.name || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* Email */}
           <div className="my-2">
             <label htmlFor="email" className="block mb-2 text-sm font-medium">Email</label>
-            <input type="email" name="email" id="email" defaultValue={form.email || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="email"
+              name="email"
+              id="email"
+              defaultValue={form?.email || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* Username */}
           <div className='my-2'>
             <label htmlFor="username" className="block mb-2 text-sm font-medium">Username</label>
-            <input type="text" name="username" id="username" defaultValue={form.username || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="text"
+              name="username"
+              id="username"
+              defaultValue={form?.username || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* Region / Community */}
           <div className='my-2'>
             <label htmlFor="region" className="block mb-2 text-sm font-medium">Region / Community</label>
-            <input type="text" name="region" id="region" defaultValue={form.region || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="text"
+              name="region"
+              id="region"
+              defaultValue={form?.region || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* Art Form / Craft */}
           <div className="my-2">
             <label htmlFor="craft" className="block mb-2 text-sm font-medium">Art Form / Craft</label>
-            <select name="craft" id="craft" defaultValue={form.craft || ''} required className="block w-full p-2 rounded-lg text-xs bg-green-300">
+            <select
+              name="craft"
+              id="craft"
+              defaultValue={form?.craft || ''}
+              required
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            >
               <option value="">Select Your Art Form</option>
               <option value="weaving">Weaving</option>
               <option value="pottery">Pottery</option>
@@ -98,39 +161,65 @@ const Dashboard = () => {
             </select>
           </div>
 
+          {/* Years of Experience */}
           <div className="my-2">
             <label htmlFor="experience" className="block mb-2 text-sm font-medium">Years of Experience</label>
-            <input type="text" name="experience" id="experience" defaultValue={form.experience || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="text"
+              name="experience"
+              id="experience"
+              defaultValue={form?.experience || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* About Work */}
           <div className="my-2">
             <label htmlFor="bio" className="block mb-2 text-sm font-medium">About Your Work</label>
-            <textarea name="bio" id="bio" rows={4} defaultValue={form.bio || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" placeholder="Tell us about your journey and practice..."></textarea>
+            <textarea
+              name="bio"
+              id="bio"
+              rows={4}
+              defaultValue={form?.bio || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+              placeholder="Tell us about your journey and practice..."
+            ></textarea>
           </div>
 
+          {/* Portfolio Link */}
           <div className="my-2">
             <label htmlFor="portfolio" className="block mb-2 text-sm font-medium">Portfolio / Instagram / Gallery Link</label>
-            <input type="url" name="portfolio" id="portfolio" defaultValue={form.portfolio || ''} className="block w-full p-2 rounded-lg text-xs bg-green-300" />
+            <input
+              type="url"
+              name="portfolio"
+              id="portfolio"
+              defaultValue={form?.portfolio || ''}
+              className="block w-full p-2 rounded-lg text-xs bg-green-300"
+            />
           </div>
 
+          {/* Submit Button */}
           <div className="my-6">
-            <button type="submit" className="text-white
- block w-full p-2 bg-green-500 rounded-lg hover:bg-green-600 font-medium text-sm">Register</button>
+            <button
+              type="submit"
+              className="text-white block w-full p-2 bg-green-500 rounded-lg hover:bg-green-600 font-medium text-sm"
+            >
+              Register
+            </button>
           </div>
         </form>
       </div>
+
+      {/* Toast Notifications */}
       <ToastContainer
-  position="top-center" // this will be overridden by className anyway
-  autoClose={2000}
-  hideProgressBar={false}
-  closeOnClick
-  pauseOnHover
-  draggable
-  className="custom-toast"
-/>
-
-
-
+        position="top-center"
+        autoClose={2000}
+        hideProgressBar={false}
+        closeOnClick
+        pauseOnHover
+        draggable
+        className="custom-toast"
+      />
     </div>
   );
 };
