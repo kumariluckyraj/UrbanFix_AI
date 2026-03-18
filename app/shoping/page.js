@@ -1,11 +1,18 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import Script from "next/script";
 
 const Shop = () => {
   const [products, setProducts] = useState([]);
   const [razorpayReady, setRazorpayReady] = useState(false);
+  const [userDetails, setUserDetails] = useState({
+    name: "",
+    phone: "",
+    location: "",
+    email: "",
+  });
+  const [cart, setCart] = useState([]);
 
+  // Load Razorpay
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -13,24 +20,59 @@ const Shop = () => {
     document.body.appendChild(script);
   }, []);
 
+  // Fetch products
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = sessionStorage.getItem("allProducts");
-      if (saved) {
-        setProducts(JSON.parse(saved));
+    const fetchProducts = async () => {
+      try {
+        const res = await fetch("/api/products");
+        const data = await res.json();
+        if (data.success) setProducts(data.products);
+      } catch (err) {
+        console.error("Failed to fetch products:", err);
       }
+    };
+    fetchProducts();
+  }, []);
+
+  // Load cart from localStorage
+  useEffect(() => {
+    const existingCart = JSON.parse(localStorage.getItem("myCart") || "[]");
+    setCart(existingCart);
+  }, []);
+
+  // Auto fetch location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+            );
+            const data = await res.json();
+            setUserDetails((prev) => ({ ...prev, location: data.display_name }));
+          } catch (err) {
+            console.error("Failed to fetch address:", err);
+          }
+        },
+        (err) => console.error(err)
+      );
     }
   }, []);
 
-  const handleAddToCart = (product) => {
-    const existingCart = JSON.parse(localStorage.getItem("cartItems")) || [];
-    localStorage.setItem("cartItems", JSON.stringify([...existingCart, product]));
-    alert("Product added to cart!");
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setUserDetails((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleBuyNow = (product) => {
+  const handleBuyNow = async (product) => {
     if (!razorpayReady) {
       alert("Razorpay is not ready yet.");
+      return;
+    }
+    if (!userDetails.name || !userDetails.phone) {
+      alert("Please enter your name and phone number");
       return;
     }
 
@@ -43,16 +85,36 @@ const Shop = () => {
       name: "Sustainable Marketplace",
       description: product.name,
       image: product.image,
-      handler: function (response) {
-        alert("Payment Successful! Payment ID: " + response.razorpay_payment_id);
-      },
       prefill: {
-        name: "Buyer",
-        email: "buyer@example.com",
-        contact: "9000090000",
+        name: userDetails.name,
+        email: userDetails.email || "",
+        contact: userDetails.phone,
       },
-      theme: {
-        color: "#22c55e",
+      theme: { color: "#22c55e" },
+      handler: async function (response) {
+        alert("Payment Successful! Payment ID: " + response.razorpay_payment_id);
+
+        // Save order to DB
+        try {
+          await fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              productId: product._id,
+              productName: product.name,
+              productPrice: product.price,
+              buyerName: userDetails.name,
+              buyerEmail: userDetails.email,
+              buyerPhone: userDetails.phone,
+              location: userDetails.location,
+              paymentId: response.razorpay_payment_id,
+            }),
+          });
+          alert("✅ Order saved successfully!");
+        } catch (err) {
+          console.error(err);
+          alert("Failed to save order.");
+        }
       },
     };
 
@@ -60,67 +122,134 @@ const Shop = () => {
     rzp.open();
   };
 
-  if (!products.length) {
-    return (
-      <div className="text-center text-gray-600 text-xl mt-10">
-        No products available.
-      </div>
-    );
+  const handleAddToCart = (product) => {
+    const existingCart = JSON.parse(localStorage.getItem("myCart") || "[]");
+    // Prevent duplicates
+    if (existingCart.find((p) => p._id === product._id)) {
+      alert(`✅ "${product.name}" is already in cart!`);
+      return;
+    }
+    existingCart.push(product);
+    localStorage.setItem("myCart", JSON.stringify(existingCart));
+    setCart(existingCart);
+    alert(`✅ "${product.name}" added to cart!`);
+  };
+
+  const handleRemoveFromCart = (productId) => {
+    const updatedCart = cart.filter((p) => p._id !== productId);
+    localStorage.setItem("myCart", JSON.stringify(updatedCart));
+    setCart(updatedCart);
+    alert("✅ Product removed from cart!");
+  };
+
+  const handleRemoveFromDB = async (productId) => {
+  const confirmDelete = confirm("Are you sure you want to delete this product permanently?");
+  if (!confirmDelete) return;
+
+  try {
+    const res = await fetch("/api/delete-product", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to delete product");
+
+    // Remove from UI immediately
+    setProducts(products.filter((p) => p._id !== productId));
+    alert("✅ Product deleted from DB!");
+  } catch (err) {
+    console.error(err);
+    alert("❌ Failed to delete product: " + err.message);
   }
+};
+
+  if (!products.length) return <div className="text-center mt-10 text-gray-600">No products available.</div>;
 
   return (
-    <div className="max-w-6xl mx-auto p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-    {products.map((product, index) => (
-      <div
-        key={index}
-        className="bg-white shadow-xl rounded-lg overflow-hidden h-[400px] flex flex-col"
-      >
-        <div className="w-full aspect-square overflow-hidden">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="px-2 flex-1 flex flex-col justify-between">
-          <div >
-            <h2 className="text-lg font-bold text-green-700 line-clamp-1 ">
-              {product.name}
-            </h2>
-            <p className="text-gray-700 text-sm line-clamp-2">
-              {product.description}
-            </p>
-            <p className="text-sm font-semibold">₹{product.price}</p>
-          </div>
-          <div className="text-sm text-gray-600">
-            <p><strong>Eco Impact:</strong> {product.ecoImpact}</p>
-            <p><strong>Artist&aposs Story:</strong> {product.artistStory}</p>
-            <p><strong>Cultural Meaning:</strong> {product.culturalMeaning}</p>
-          </div>
-          <div className="m-4 flex flex-wrap justify-end gap-1 text-xs">
-           
-            
-            <button
-              onClick={() => handleAddToCart(product)}
-              className="px-6 mx-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded"
-            >
-              Cart
-            </button>
-            <button
-              onClick={() => handleBuyNow(product)}
-              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
-            >
-              Buy
-            </button>
-          </div>
-        </div>
+    <div className="max-w-6xl mx-auto p-6">
+      {/* User Info */}
+      <div className="mb-6 p-4 bg-green-50 rounded-lg">
+        <h2 className="font-bold text-green-700 mb-2">Enter Your Details</h2>
+        <input
+          type="text"
+          name="name"
+          placeholder="Name"
+          value={userDetails.name}
+          onChange={handleInputChange}
+          className="border p-2 rounded w-full mb-2"
+        />
+        <input
+          type="text"
+          name="phone"
+          placeholder="Phone"
+          value={userDetails.phone}
+          onChange={handleInputChange}
+          className="border p-2 rounded w-full mb-2"
+        />
+        <input
+          type="text"
+          name="email"
+          placeholder="Email (optional)"
+          value={userDetails.email}
+          onChange={handleInputChange}
+          className="border p-2 rounded w-full mb-2"
+        />
+        <input
+          type="text"
+          name="location"
+          placeholder="Location"
+          value={userDetails.location}
+          onChange={handleInputChange}
+          className="border p-2 rounded w-full mb-2"
+        />
+        <p className="text-gray-600 text-sm">Location can be auto-filled using your browser.</p>
       </div>
-    ))}
-    <Script
-      src="https://checkout.razorpay.com/v1/checkout.js"
-      onLoad={() => setRazorpayReady(true)}
-    />
-  </div>
+
+      {/* Products */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {products.map((product) => (
+          <div key={product._id} className="bg-white shadow-xl rounded-lg overflow-hidden flex flex-col h-[450px]">
+            <div className="w-full aspect-square overflow-hidden">
+              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+            </div>
+            <div className="px-2 flex-1 flex flex-col justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-green-700">{product.name}</h2>
+                <p className="text-gray-700 text-sm line-clamp-2">{product.description}</p>
+                <p className="text-sm font-semibold">₹{product.price}</p>
+              </div>
+              <div className="text-sm text-gray-600">
+                <p><strong>Eco Impact:</strong> {product.ecoImpact}</p>
+                <p><strong>Artist&apos;s Story:</strong> {product.artistStory}</p>
+                <p><strong>Cultural Meaning:</strong> {product.culturalMeaning}</p>
+              </div>
+              <div className="flex justify-end gap-2 m-4 text-xs">
+                <button
+                  onClick={() => handleBuyNow(product)}
+                  className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+                >
+                  Buy Now
+                </button>
+                <button
+                  onClick={() => handleAddToCart(product)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                >
+                  Add to Cart
+                </button>
+               <button
+  onClick={() => handleRemoveFromDB(product._id)}
+  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
+>
+  Delete
+</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 

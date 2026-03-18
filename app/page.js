@@ -30,7 +30,7 @@ export default function Home() {
     <h3 className="text-2xl font-semibold mb-6 text-green-800">Ready to make a difference?</h3>
     <div className="flex flex-col md:flex-row justify-center gap-6">
       <button className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition">
-       <Link href={"/learn"}>Explore Themes</Link>
+       <Link href={"/shoping"}>Explore Themes</Link>
       </button>
      
       <button className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition">
@@ -79,7 +79,7 @@ export default function Home() {
           Bring your idea and register to participate.
         </p>
         <button className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition my-2 mx-12">
-       <Link href={"/login"}> Register </Link>
+       <Link href={"/login"}> Submit </Link>
       </button>
       </div>
 
@@ -93,7 +93,7 @@ export default function Home() {
           Receive support from experts in sustainability, culture, and business to shape your solution.
         </p>
         <button className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition mx-5 my-2">
-       <Link href={"/learn"}> Start Learning</Link>
+       <Link href={"/login"}> Start Learning</Link>
       </button>
       </div>
 
@@ -107,7 +107,7 @@ export default function Home() {
           Present your work to a global audience and access opportunities to grow your impact.
         </p>
         <button className=" bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-6 rounded-lg transition mx-14 my-2">
-       <Link href={"/sell"}> Sell</Link>
+       <Link href={"/login"}> Sell</Link>
       </button>
       </div>
     </div>
