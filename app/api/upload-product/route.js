@@ -1,10 +1,12 @@
-export const runtime = "nodejs";
+// File: app/api/upload-product/route.js
+export const runtime = "nodejs"; // ensures Node.js runtime on Vercel
 
 import fs from "fs";
 import path from "path";
-import { index } from "@/lib/pinecone";
 import connectDB from "@/db/connectDb";
 import Product from "@/models/Product";
+import { index } from "@/lib/pinecone";
+
 // -------------------- Helpers --------------------
 function averageEmbedding(tensor) {
   if (!tensor || !tensor.data || !tensor.dims) return [];
@@ -33,27 +35,27 @@ function averageEmbedding(tensor) {
   return [];
 }
 
-// -------------------- Load Models --------------------
+// -------------------- Load Transformers Pipelines --------------------
 let textEmbedder, imageClassifier, llmPipeline;
 
 async function loadPipelines() {
   if (!textEmbedder) {
-    const { pipeline } = await import("@xenova/transformers");
+    // Dynamic import to fix ESM/CommonJS issue on Vercel
+    const transformers = await import("@xenova/transformers");
 
-    textEmbedder = await pipeline(
+    textEmbedder = await transformers.pipeline(
       "feature-extraction",
       "Xenova/all-MiniLM-L12-v2",
       { backend: "cpu" }
     );
 
-    imageClassifier = await pipeline(
+    imageClassifier = await transformers.pipeline(
       "zero-shot-image-classification",
       "Xenova/clip-vit-base-patch32",
       { backend: "cpu" }
     );
 
-    // LLM only for explanation
-    llmPipeline = await pipeline(
+    llmPipeline = await transformers.pipeline(
       "text-generation",
       "Xenova/distilgpt2",
       { backend: "cpu" }
@@ -63,14 +65,14 @@ async function loadPipelines() {
   return { textEmbedder, imageClassifier, llmPipeline };
 }
 
-// -------------------- MAIN API --------------------
+// -------------------- API Route --------------------
 export async function POST(req) {
   try {
+    // Load pipelines dynamically
     const { textEmbedder, imageClassifier, llmPipeline } =
       await loadPipelines();
 
     const data = await req.json();
-
     const {
       name,
       description,
@@ -89,10 +91,8 @@ export async function POST(req) {
       );
     }
 
-    // -------------------- TEXT EMBEDDING --------------------
-    const textEmbeddingRaw = await textEmbedder(
-      description + " " + materials
-    );
+    // -------------------- Text Embedding --------------------
+    const textEmbeddingRaw = await textEmbedder(description + " " + materials);
     const textEmbedding = averageEmbedding(textEmbeddingRaw);
 
     if (textEmbedding.length !== 384) {
@@ -104,12 +104,9 @@ export async function POST(req) {
       );
     }
 
-    // -------------------- IMAGE PROCESS --------------------
+    // -------------------- Image Classification --------------------
     const tempPath = path.join(process.cwd(), `temp-${Date.now()}.png`);
-    const base64Data = imageBase64.replace(
-      /^data:image\/\w+;base64,/,
-      ""
-    );
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
     fs.writeFileSync(tempPath, base64Data, "base64");
 
     const labels = [
@@ -126,7 +123,6 @@ export async function POST(req) {
 
     const plasticScore =
       result.find((r) => r.label === "plastic object")?.score || 0;
-
     const isPlastic = plasticScore > 0.4;
 
     let allowSubmit = true;
@@ -134,21 +130,20 @@ export async function POST(req) {
 
     if (isPlastic) {
       allowSubmit = false;
-      plasticWarning = `⚠️ Image suggests plastic material (confidence: ${plasticScore.toFixed(
+      plasticWarning = `⚠️ Image suggests plastic (confidence: ${plasticScore.toFixed(
         2
       )})`;
     }
 
-    // -------------------- MATERIAL CHECK --------------------
+    // -------------------- Material check --------------------
     const materialsText = materials.toLowerCase();
-
     if (isPlastic && materialsText.includes("clay")) {
       plasticWarning +=
         "\n⚠️ Mismatch: Image looks plastic but materials say clay.";
       allowSubmit = false;
     }
 
-    // -------------------- STORE IN PINECONE --------------------
+    // -------------------- Store in Pinecone --------------------
     await index.upsert([
       {
         id: Date.now().toString(),
@@ -165,7 +160,7 @@ export async function POST(req) {
       },
     ]);
 
-    // -------------------- RAG RETRIEVAL --------------------
+    // -------------------- RAG Retrieval --------------------
     const queryResponse = await index.query({
       vector: textEmbedding,
       topK: 5,
@@ -181,46 +176,36 @@ export async function POST(req) {
       .map((k, i) => `Knowledge ${i + 1}: ${k.text}`)
       .join("\n");
 
-    // -------------------- DECISION --------------------
+    // -------------------- Decision --------------------
     let ecoDecision = "UNKNOWN";
-
-    
-
-    if (isPlastic) {
-      ecoDecision = "NOT_ECO";
-    } else if (
+    if (isPlastic) ecoDecision = "NOT_ECO";
+    else if (
       materialsText.includes("clay") ||
       materialsText.includes("wood") ||
       materialsText.includes("bamboo") ||
       materialsText.includes("natural")
-    ) {
+    )
       ecoDecision = "ECO";
-    } else if (
-      materialsText.includes("metal") ||
-      materialsText.includes("glass")
-    ) {
+    else if (materialsText.includes("metal") || materialsText.includes("glass"))
       ecoDecision = "PARTIAL";
+
+    // -------------------- Save to MongoDB --------------------
+    if (allowSubmit && ecoDecision !== "NOT_ECO") {
+      await connectDB();
+      await Product.create({
+        name,
+        description,
+        materials,
+        ecoImpact,
+        artistStory,
+        culturalMeaning,
+        price: Number(price),
+        image: imageBase64,
+        ecoDecision,
+      });
     }
 
-    // -------------------- SAVE TO MONGODB --------------------
-if (allowSubmit && ecoDecision !== "NOT_ECO") {
-  await connectDB();
-
-  await Product.create({
-    name,
-    description,
-    materials,
-    ecoImpact,
-    artistStory,
-    culturalMeaning,
-    price: Number(price),
-    image: imageBase64,
-    ecoDecision,
-  });
-
-}
-
-    // -------------------- LLM EXPLANATION --------------------
+    // -------------------- LLM Explanation --------------------
     const prompt = `
 Explain in 2-3 short lines why this product is ${ecoDecision}.
 
@@ -240,24 +225,20 @@ Context: ${contextText}
 
     let explanation = generatedText.replace(prompt, "").trim();
 
-    // fallback
     if (!explanation || explanation.length < 20) {
-      if (ecoDecision === "NOT_ECO") {
+      if (ecoDecision === "NOT_ECO")
         explanation =
           "This product is not eco-friendly because it likely contains plastic which harms the environment.";
-      } else if (ecoDecision === "ECO") {
+      else if (ecoDecision === "ECO")
         explanation =
           "This product is eco-friendly as it uses natural and sustainable materials.";
-      } else if (ecoDecision === "PARTIAL") {
+      else if (ecoDecision === "PARTIAL")
         explanation =
           "This product is partially eco-friendly since materials like metal or glass are recyclable.";
-      } else {
-        explanation =
-          "Eco-friendliness cannot be determined from the given information.";
-      }
+      else explanation = "Eco-friendliness cannot be determined.";
     }
 
-    // -------------------- FINAL CLEAN OUTPUT --------------------
+    // -------------------- Final Response --------------------
     const ecoAnalysis = `
 Decision: ${ecoDecision}
 
@@ -280,27 +261,20 @@ ${topResults.map((k) => k.text).join("\n")}
 ${allowSubmit ? "✅ Eco-friendly. Can submit." : "❌ Not eco-friendly. Cannot submit."}
 `.trim();
 
-    // -------------------- RESPONSE --------------------
     return new Response(
       JSON.stringify({
         success: true,
         ecoAnalysis,
         relatedKnowledge: topResults,
         allowSubmit,
-        plasticInfo: {
-          isPlastic,
-          score: plasticScore,
-        },
+        plasticInfo: { isPlastic, score: plasticScore },
       }),
       { status: 200 }
     );
   } catch (error) {
     console.error("Upload Error:", error);
-
     return new Response(
-      JSON.stringify({
-        error: error.message || "Failed to process product",
-      }),
+      JSON.stringify({ error: error.message || "Failed to process product" }),
       { status: 500 }
     );
   }
