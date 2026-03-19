@@ -1,5 +1,5 @@
 // File: app/api/upload-product/route.js
-export const runtime = "nodejs"; // ensures Node.js runtime on Vercel
+export const runtime = "nodejs"; 
 
 import fs from "fs";
 import path from "path";
