@@ -126,7 +126,7 @@ const Sell = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to submit product");
 
-      alert("✅ Product submitted successfully!");
+      alert("Product submitted successfully!");
 
       // Reset form
       setProduct({
@@ -229,7 +229,7 @@ const Sell = () => {
               loading ? "opacity-70" : "hover:bg-green-700"
             }`}
           >
-            {loading ? "Analyzing..." : "🔍 Analyze Product"}
+            {loading ? "Analyzing..." : " Analyze Product"}
           </button>
 
           {allowSubmit && (
@@ -239,7 +239,7 @@ const Sell = () => {
               disabled={loading}
               className="w-full mt-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold"
             >
-              {loading ? "Submitting..." : "🚀 Submit Product"}
+              {loading ? "Submitting..." : " Submit Product"}
             </button>
           )}
         </form>
