@@ -238,12 +238,7 @@ const Shop = () => {
                 >
                   Add to Cart
                 </button>
-               <button
-  onClick={() => handleRemoveFromDB(product._id)}
-  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
->
-  Delete
-</button>
+               
               </div>
             </div>
           </div>
