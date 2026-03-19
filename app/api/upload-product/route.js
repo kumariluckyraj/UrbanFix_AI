@@ -1,8 +1,8 @@
+
 // File: app/api/upload-product/route.js
 export const runtime = "nodejs"; 
 
-import fs from "fs";
-import path from "path";
+
 import connectDB from "@/db/connectDb";
 import Product from "@/models/Product";
 import { index } from "@/lib/pinecone";
@@ -10,25 +10,20 @@ import { index } from "@/lib/pinecone";
 // -------------------- Helpers --------------------
 function averageEmbedding(tensor) {
   if (!tensor || !tensor.data || !tensor.dims) return [];
-
   const dims = tensor.dims;
   const data = tensor.data;
 
-  if (dims.length === 2) {
-    return Array.from(data);
-  }
+  if (dims.length === 2) return Array.from(data);
 
   if (dims.length === 3) {
     const tokens = dims[1];
     const dim = dims[2];
     const avg = new Array(dim).fill(0);
-
     for (let t = 0; t < tokens; t++) {
       for (let d = 0; d < dim; d++) {
         avg[d] += data[t * dim + d];
       }
     }
-
     return avg.map((v) => v / tokens);
   }
 
@@ -40,7 +35,6 @@ let textEmbedder, imageClassifier, llmPipeline;
 
 async function loadPipelines() {
   if (!textEmbedder) {
-    // Dynamic import to fix ESM/CommonJS issue on Vercel
     const transformers = await import("@xenova/transformers");
 
     textEmbedder = await transformers.pipeline(
@@ -61,53 +55,30 @@ async function loadPipelines() {
       { backend: "cpu" }
     );
   }
-
   return { textEmbedder, imageClassifier, llmPipeline };
 }
 
 // -------------------- API Route --------------------
 export async function POST(req) {
   try {
-    // Load pipelines dynamically
-    const { textEmbedder, imageClassifier, llmPipeline } =
-      await loadPipelines();
+    const { textEmbedder, imageClassifier, llmPipeline } = await loadPipelines();
 
     const data = await req.json();
-    const {
-      name,
-      description,
-      materials,
-      ecoImpact,
-      artistStory,
-      culturalMeaning,
-      price,
-      imageBase64,
-    } = data;
+    const { name, description, materials, ecoImpact, artistStory, culturalMeaning, price, imageBase64 } = data;
 
     if (!name || !description || !materials || !imageBase64) {
-      return new Response(
-        JSON.stringify({ error: "All required fields missing" }),
-        { status: 400 }
-      );
+      return new Response(JSON.stringify({ error: "All required fields missing" }), { status: 400 });
     }
 
     // -------------------- Text Embedding --------------------
     const textEmbeddingRaw = await textEmbedder(description + " " + materials);
     const textEmbedding = averageEmbedding(textEmbeddingRaw);
-
     if (textEmbedding.length !== 384) {
-      return new Response(
-        JSON.stringify({
-          error: `Embedding mismatch: ${textEmbedding.length} != 384`,
-        }),
-        { status: 500 }
-      );
+      return new Response(JSON.stringify({ error: `Embedding mismatch: ${textEmbedding.length} != 384` }), { status: 500 });
     }
 
-    // -------------------- Image Classification --------------------
-    const tempPath = path.join(process.cwd(), `temp-${Date.now()}.png`);
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-    fs.writeFileSync(tempPath, base64Data, "base64");
+    // -------------------- Image Classification (in-memory) --------------------
+    const imageBuffer = Buffer.from(imageBase64.replace(/^data:image\/\w+;base64,/, ""), "base64");
 
     const labels = [
       "plastic object",
@@ -118,91 +89,46 @@ export async function POST(req) {
       "eco friendly handmade product",
     ];
 
-    const result = await imageClassifier(tempPath, labels);
-    fs.unlinkSync(tempPath);
-
-    const plasticScore =
-      result.find((r) => r.label === "plastic object")?.score || 0;
+    const result = await imageClassifier(imageBuffer, labels);
+    const plasticScore = result.find((r) => r.label === "plastic object")?.score || 0;
     const isPlastic = plasticScore > 0.4;
 
     let allowSubmit = true;
     let plasticWarning = "";
-
     if (isPlastic) {
       allowSubmit = false;
-      plasticWarning = `⚠️ Image suggests plastic (confidence: ${plasticScore.toFixed(
-        2
-      )})`;
+      plasticWarning = `⚠️ Image suggests plastic (confidence: ${plasticScore.toFixed(2)})`;
     }
 
     // -------------------- Material check --------------------
     const materialsText = materials.toLowerCase();
     if (isPlastic && materialsText.includes("clay")) {
-      plasticWarning +=
-        "\n⚠️ Mismatch: Image looks plastic but materials say clay.";
+      plasticWarning += "\n⚠️ Mismatch: Image looks plastic but materials say clay.";
       allowSubmit = false;
     }
 
     // -------------------- Store in Pinecone --------------------
-    await index.upsert([
-      {
-        id: Date.now().toString(),
-        values: textEmbedding,
-        metadata: {
-          name,
-          description,
-          materials,
-          ecoImpact,
-          artistStory,
-          culturalMeaning,
-          price,
-        },
-      },
-    ]);
+    await index.upsert([{
+      id: Date.now().toString(),
+      values: textEmbedding,
+      metadata: { name, description, materials, ecoImpact, artistStory, culturalMeaning, price },
+    }]);
 
     // -------------------- RAG Retrieval --------------------
-    const queryResponse = await index.query({
-      vector: textEmbedding,
-      topK: 5,
-      includeMetadata: true,
-    });
-
-    const topResults = queryResponse.matches.map((m) => ({
-      text: m.metadata?.description || "No description",
-      score: m.score,
-    }));
-
-    const contextText = topResults
-      .map((k, i) => `Knowledge ${i + 1}: ${k.text}`)
-      .join("\n");
+    const queryResponse = await index.query({ vector: textEmbedding, topK: 5, includeMetadata: true });
+    const topResults = queryResponse.matches.map(m => ({ text: m.metadata?.description || "No description", score: m.score }));
+    const contextText = topResults.map((k, i) => `Knowledge ${i + 1}: ${k.text}`).join("\n");
 
     // -------------------- Decision --------------------
     let ecoDecision = "UNKNOWN";
     if (isPlastic) ecoDecision = "NOT_ECO";
-    else if (
-      materialsText.includes("clay") ||
-      materialsText.includes("wood") ||
-      materialsText.includes("bamboo") ||
-      materialsText.includes("natural")
-    )
-      ecoDecision = "ECO";
-    else if (materialsText.includes("metal") || materialsText.includes("glass"))
-      ecoDecision = "PARTIAL";
+    else if (["clay","wood","bamboo","natural"].some(m => materialsText.includes(m))) ecoDecision = "ECO";
+    else if (["metal","glass"].some(m => materialsText.includes(m))) ecoDecision = "PARTIAL";
 
     // -------------------- Save to MongoDB --------------------
     if (allowSubmit && ecoDecision !== "NOT_ECO") {
       await connectDB();
-      await Product.create({
-        name,
-        description,
-        materials,
-        ecoImpact,
-        artistStory,
-        culturalMeaning,
-        price: Number(price),
-        image: imageBase64,
-        ecoDecision,
-      });
+      await Product.create({ name, description, materials, ecoImpact, artistStory, culturalMeaning, price: Number(price), image: imageBase64, ecoDecision });
     }
 
     // -------------------- LLM Explanation --------------------
@@ -213,28 +139,13 @@ Product: ${description}
 Materials: ${materials}
 Context: ${contextText}
 `;
-
-    const ragResult = await llmPipeline(prompt, {
-      max_new_tokens: 60,
-      temperature: 0.5,
-    });
-
-    let generatedText = Array.isArray(ragResult)
-      ? ragResult[0].generated_text
-      : ragResult.generated_text;
-
+    const ragResult = await llmPipeline(prompt, { max_new_tokens: 60, temperature: 0.5 });
+    let generatedText = Array.isArray(ragResult) ? ragResult[0].generated_text : ragResult.generated_text;
     let explanation = generatedText.replace(prompt, "").trim();
-
     if (!explanation || explanation.length < 20) {
-      if (ecoDecision === "NOT_ECO")
-        explanation =
-          "This product is not eco-friendly because it likely contains plastic which harms the environment.";
-      else if (ecoDecision === "ECO")
-        explanation =
-          "This product is eco-friendly as it uses natural and sustainable materials.";
-      else if (ecoDecision === "PARTIAL")
-        explanation =
-          "This product is partially eco-friendly since materials like metal or glass are recyclable.";
+      if (ecoDecision === "NOT_ECO") explanation = "This product is not eco-friendly because it likely contains plastic which harms the environment.";
+      else if (ecoDecision === "ECO") explanation = "This product is eco-friendly as it uses natural and sustainable materials.";
+      else if (ecoDecision === "PARTIAL") explanation = "This product is partially eco-friendly since materials like metal or glass are recyclable.";
       else explanation = "Eco-friendliness cannot be determined.";
     }
 
@@ -256,26 +167,14 @@ ${explanation}
 ${plasticWarning ? plasticWarning : ""}
 
 Related Knowledge:
-${topResults.map((k) => k.text).join("\n")}
+${topResults.map(k => k.text).join("\n")}
 
 ${allowSubmit ? "✅ Eco-friendly. Can submit." : "❌ Not eco-friendly. Cannot submit."}
 `.trim();
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        ecoAnalysis,
-        relatedKnowledge: topResults,
-        allowSubmit,
-        plasticInfo: { isPlastic, score: plasticScore },
-      }),
-      { status: 200 }
-    );
+    return new Response(JSON.stringify({ success: true, ecoAnalysis, relatedKnowledge: topResults, allowSubmit, plasticInfo: { isPlastic, score: plasticScore } }), { status: 200 });
   } catch (error) {
     console.error("Upload Error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Failed to process product" }),
-      { status: 500 }
-    );
+    return new Response(JSON.stringify({ error: error.message || "Failed to process product" }), { status: 500 });
   }
 }
