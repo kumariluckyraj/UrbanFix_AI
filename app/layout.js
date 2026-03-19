@@ -7,8 +7,8 @@ import SessionWrapper from "@/components/SessionWrapper";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Get me a chai - Fund your project with chai",
-  description: "This website is a crowdfunding platform for creators.",
+  title: "Equicraft - AI Powered Eco-Friendly Product Verification Platform",
+description: "Equicraft is an AI-powered platform that analyzes and verifies whether products are truly eco-friendly using RAG, vector search, and image classification.",
 };
 
 export default function RootLayout({ children }) {
