@@ -1,5 +1,7 @@
-// File: app/api/upload-product/route.mjs
-export const runtime = "nodejs";
+
+// File: app/api/upload-product/route.js
+export const runtime = "nodejs"; 
+
 
 import connectDB from "@/db/connectDb";
 import Product from "@/models/Product";
