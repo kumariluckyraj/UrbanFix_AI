@@ -22,7 +22,7 @@ export default function AdminData() {
   const [reports, setReports]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState({});
-
+const [votedIssues, setVotedIssues] = useState([]);
   const fetchReports = async () => {
     try {
       const res  = await fetch("/api/get-reports");
@@ -37,6 +37,11 @@ export default function AdminData() {
 
   useEffect(() => { fetchReports(); }, []);
 
+useEffect(() => {
+  const stored = JSON.parse(localStorage.getItem("votedIssues")) || [];
+  setVotedIssues(stored);
+}, []);
+
   const updateStatus = async (id, newStatus) => {
     try {
       await fetch("/api/update-status", {
@@ -49,6 +54,29 @@ export default function AdminData() {
       console.error(err);
     }
   };
+
+const handleThumbsUp = async (id) => {
+  if (votedIssues.includes(id)) return; // prevent double vote
+
+  try {
+    await fetch("/api/thumbs-up", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ issueId: id }),
+    });
+
+    const updated = [...votedIssues, id];
+    setVotedIssues(updated);
+    localStorage.setItem("votedIssues", JSON.stringify(updated));
+
+    fetchReports(); // refresh UI
+  } catch (err) {
+    console.error(err);
+  }
+};
+
 
   const toggleExpand = (id) =>
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -153,8 +181,23 @@ export default function AdminData() {
                   </div>
                 </div>
 
+
                 {/* Divider */}
                 <div style={styles.divider} />
+
+                <div style={styles.voteRow}>
+  <button
+    onClick={() => handleThumbsUp(r._id)}
+    disabled={votedIssues.includes(r._id)}
+    style={{
+      ...styles.voteBtn,
+      opacity: votedIssues.includes(r._id) ? 0.5 : 1,
+      cursor: votedIssues.includes(r._id) ? "not-allowed" : "pointer",
+    }}
+  >
+    👍 {r.thumbsUp || 0}
+  </button>
+</div>
 
                 {/* Ticket + Status row */}
                 <div style={styles.bottomRow}>
@@ -212,6 +255,20 @@ export default function AdminData() {
 /* ─────────────── Styles ─────────────── */
 
 const styles = {
+  voteRow: {
+  marginTop: "0.5rem",
+},
+
+voteBtn: {
+  background: "rgba(59,130,246,0.15)",
+  border: "1px solid rgba(59,130,246,0.35)",
+  color: "#60a5fa",
+  padding: "0.35rem 0.8rem",
+  borderRadius: 8,
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  transition: "all 0.2s",
+},
   page: {
     fontFamily: "'DM Sans', sans-serif",
     background: "#060a12",
