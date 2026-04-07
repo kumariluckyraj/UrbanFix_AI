@@ -171,14 +171,7 @@ export default function AllIssues() {
 
                 {/* Top row: priority badge + ticket */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                  <span style={{
-                    fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.06em",
-                    textTransform: "uppercase", padding: "0.22rem 0.65rem", borderRadius: 100,
-                    background: priority.bg, border: `1px solid ${priority.border}`,
-                    color: priority.text,
-                  }}>
-                    {data.priority?.level || "—"}
-                  </span>
+                 
                   <span style={{ fontSize: "0.67rem", color: "rgba(232,234,240,0.25)", fontFamily: "monospace" }}>
                     #{data.action?.ticketId?.slice(-6) || "—"}
                   </span>
