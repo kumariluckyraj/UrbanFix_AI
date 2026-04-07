@@ -7,8 +7,8 @@ import SessionWrapper from "@/components/SessionWrapper";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Equicraft - AI Powered Eco-Friendly Product Verification Platform",
-description: "Equicraft is an AI-powered platform that analyzes and verifies whether products are truly eco-friendly using RAG, vector search, and image classification.",
+  title: "URBANFIX_AI - AI Powered Civic Report Platform",
+description: "Report broken infrastructure, detect duplicates, and auto-route civic issues to the right department — powered by AI.",
 };
 
 export default function RootLayout({ children }) {
