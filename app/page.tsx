@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import * as THREE from "three";
 import AllIssues from "@/components/Allissues";
-import Navbar from "@/components/navbar";
+import Navbar from "@/components/Navbar";
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
