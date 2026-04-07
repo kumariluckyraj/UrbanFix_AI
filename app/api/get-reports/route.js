@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextResponse } from "next/server";
 import connectDB from "@/db/connectDb";
 import Report from "@/models/Report";
@@ -10,7 +13,7 @@ export async function GET() {
 
     return NextResponse.json({ reports });
   } catch (err) {
-  console.error("get-reports error:", err);
-  return NextResponse.json({ error: err.message }, { status: 500 });
-}
+    console.error("get-reports error:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

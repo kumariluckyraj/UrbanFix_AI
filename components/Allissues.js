@@ -7,17 +7,20 @@ export default function AllIssues() {
   const [loading, setLoading] = useState(true);
 
   const fetchIssues = async () => {
-    try {
-      const res = await fetch("/api/get-reports");
-      const data = await res.json();
-      const valid = data.reports.filter((r) => r.resultData);
-      setIssues(valid);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const res = await fetch("/api/get-reports", {
+      cache: "no-store", // 🔥 THIS LINE FIXES YOUR ISSUE
+    });
+
+    const data = await res.json();
+    const valid = data.reports.filter((r) => r.resultData);
+    setIssues(valid);
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleThumbsUp = async (id) => {
     try {
